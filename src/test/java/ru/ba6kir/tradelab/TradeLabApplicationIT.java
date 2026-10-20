@@ -16,6 +16,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.telegram.telegrambots.longpolling.starter.TelegramBotInitializer;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -23,7 +25,8 @@ import ru.ba6kir.tradelab.common.metadata.ApplicationMetadata;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "tradelab.telegram.enabled=false")
 @Testcontainers(disabledWithoutDocker = true)
 class TradeLabApplicationIT {
 
@@ -53,6 +56,8 @@ class TradeLabApplicationIT {
     @Test
     void startsFullApplicationContext() {
         assertThat(context.getBean(TradeLabApplication.class)).isNotNull();
+        assertThat(context.getBeansOfType(TelegramClient.class)).isEmpty();
+        assertThat(context.getBeansOfType(TelegramBotInitializer.class)).isEmpty();
         assertThat(entityManager.getEntityManagerFactory().getProperties())
                 .containsEntry("hibernate.hbm2ddl.auto", "validate");
     }
