@@ -1,6 +1,6 @@
 # TradeLab Portfolio
 
-TradeLab Portfolio is a private Telegram assistant being developed for long-term analysis of Russian equities listed on MOEX. It provides PostgreSQL persistence, health monitoring, an optional private Telegram bot, T-Invest stock metadata, latest exchange trade prices, historical daily candles, fundamental-data snapshots, a reporting calendar and instrument-specific dividend observations/analytics. Portfolio management, recommendations, AI analysis, trading and scheduled reports remain outside the implemented scope.
+TradeLab Portfolio is a private Telegram assistant being developed for long-term analysis of Russian equities listed on MOEX. It provides PostgreSQL persistence, health monitoring, an optional private Telegram bot, T-Invest stock metadata, latest exchange trade prices, historical daily candles, fundamental-data snapshots, reporting/dividend calendars, sector classification, typed financial analysis and experimental explainable fundamental scores. Portfolio management, investment recommendations, market-wide ranking, AI analysis, trading and scheduled reports remain outside the implemented scope.
 
 ## Stack and prerequisites
 
@@ -56,6 +56,15 @@ On Bash, use `cp .env.example .env` and your preferred editor. Never commit real
 | `DIVIDENDS_FORWARD_DAYS` | Dividend record-date query horizon, 90–366 days | `365` |
 | `DIVIDENDS_CACHE_TTL` | Dividend retrieval cache lifetime; positive, at most 30d | `24h` |
 | `DIVIDENDS_REFRESH_COOLDOWN` | Durable manual dividend refresh protection per instrument, 10s–10m | `60s` |
+| `ANALYSIS_MINIMUM_PEERS` | Minimum valid other companies for metric-specific relative position, 5–100 | `5` |
+| `ANALYSIS_CLASSIFICATION_MAX_AGE` | Maximum classification verification age, 1–3650 days | `365d` |
+| `SCORING_MODEL_VERSION` / `SCORING_CONFIGURATION_VERSION` | Immutable algorithm/configuration version pair | `fundamental-heuristic-1` / `initial-1` |
+| `SCORING_WEIGHT_Q/F/V/D` | Experimental pillar weights; exact sum must be 1 | `.35 / .25 / .25 / .15` |
+| `SCORING_MANDATORY_PILLARS` | Every positive-weight pillar must be mandatory | `Q,F,V,D` |
+| `SCORING_OBSERVATION_MAX_AGE` | Scoring input retrieval freshness, positive and at most 30d | `24h` |
+| `SCORING_FINANCIAL_PERIOD_MAX_AGE` | Separate maximum financial-period age, 30–3650d | `548d` |
+| `SCORING_MINIMUM_DIVIDEND_DAYS` / `SCORING_MINIMUM_DIVIDEND_YEARS` | Required queried history days and observed record years | `1095` / `3` |
+| `SCORING_EXTREME_YIELD` / `SCORING_HIGH_LEVERAGE` | Experimental extreme-yield percent and non-bank leverage risk threshold | `20` / `6` |
 
 The local profile defaults host, port, database name, and username; it never supplies a password. Without the local profile, host, name, username, and password must be supplied. The default port is 5432. Typed configuration rejects invalid values before a database connection is opened. Credentials are passed separately from the JDBC URL.
 
@@ -128,6 +137,12 @@ Check these commands from the owner's private chat:
 | `/divcalendar` | Configured tracked tickers, next 90 days plus recent announcements/cancellation observations |
 | `/divrefresh SBER` | Manual dividend refresh with new/conflicting/cancelled/unchanged observation counts |
 | `/divhistory SBER 3y` | Record-date history; supports 1y, 3y, 5y and UID in place of ticker |
+| `/sector SBER` | Verified asset sector/business type, source, override and verification state, or explicit UNKNOWN |
+| `/metrics SBER` | Canonical provider/derived metrics, periods, units, lineage/quality and readiness |
+| `/compare SBER` | Compatible cached sector peers, descriptive median/count, or explicit unavailability; no rating |
+| `/score SBER` | Evaluate stored financial evidence; show experimental overall/pillars or exact unscored reasons |
+| `/scoreinfo SBER` | Dry-run eligibility, metric contributions, rules, source IDs and fingerprints |
+| `/scorehistory SBER` | Latest 20 stored distinct assessments with model/configuration versions |
 | `/unknown` | Short Russian message pointing to `/help` |
 
 Command names are case-insensitive. Extra whitespace is accepted, including `/PING@YourBotName`; a suffix naming another bot is ignored. `/start`, `/help`, `/ping`, and `/status` take no arguments and report a readable validation error for extra input. Market handlers accept arguments through `TelegramCommand.acceptsArguments()`. Ordinary text and non-message updates are ignored.
@@ -239,7 +254,27 @@ The module retrieves real instrument-specific [GetDividends](https://developer.t
 
 Amounts and lot equivalents use `BigDecimal` and are labelled provider-defined. `dividend_net` does not establish investor-specific tax treatment. Status labels distinguish announcements, cancellations, historical records and unknown evidence; a date is never proof of account receipt. Without an authoritative event ID, conflicting possible revisions remain visible as ambiguous observations and cannot inflate historical sums/yields. The guarded 365-day sum uses record dates; optional yields use an explicitly dated positive same-currency stored trade reference. Missing/stale/ambiguous inputs produce unavailable calculations. Provider yield is separately labelled; its scale and the provider reference price's exact ex-date are not invented.
 
-See [docs/DIVIDENDS.md](docs/DIVIDENDS.md) for source fields, reconciliation/lifecycle, formulas, quality, migration/files, actual test results and API limitations. Automated verification uses synthetic responses and disposable PostgreSQL 17 containers; a production token/Telegram smoke check remains pending. Task 4.2 adds no recommendations, account accounting, taxes, portfolio yield, trading, schedules or forecasts; Stage 5 is not started.
+See [docs/DIVIDENDS.md](docs/DIVIDENDS.md) for source fields, reconciliation/lifecycle, formulas, quality, migration/files, actual test results and API limitations. Automated verification uses synthetic responses and disposable PostgreSQL 17 containers; a production token/Telegram smoke check remains pending. Task 4.2 adds no recommendations, account accounting, taxes, portfolio yield, trading, schedules or forecasts.
+
+## Financial Metrics & Sector Classification (Task 5.1)
+
+Use `/sector SBER`, `/metrics SBER` and `/compare SBER`; all accept instrument UID. Classifications belong to verified asset identities and distinguish banks, non-bank financial companies and non-financial businesses. The adapter preserves the provider's raw asset-sector label. Explicit mappings and maintained verified issuer/asset configuration determine the profile; unknown/broad labels remain UNKNOWN. No real company/asset IDs or unverified production seed values are hardcoded. See [seed configuration](docs/FINANCIAL_ANALYSIS.md#maintained-seed-configuration) for supplying independently verified SBER/LKOH/GMKN or other mappings through an additional Spring YAML file.
+
+Migration V6 adds asset classifications, canonical metric definitions and derived observations with source-snapshot/asset constraints and input lineage; provider values remain in existing fundamental tables. Calculations use BigDecimal, preserve legitimate losses/net cash, reject missing inputs, invalid denominators and incompatible periods/currencies, and retain provider/derived variants separately. Sector profiles declare multiple required/optional concepts, with explicit readiness and unsupported business-type handling. Bank profiles exclude industrial leverage rules.
+
+Current provider limitations remain visible: uncertain rate scales and missing per-metric reporting dates prevent many comparisons/derived ratios. Snapshot fiscal context is not substituted for every metric's period. Missing cash, average equity, NOPAT, invested capital, capital adequacy/asset quality and unsupported growth measures are never fabricated. `/compare` uses cached, classified peer assets, deduplicates verified issuer identities, requires compatible dates/definitions/currencies and shows no percentile with fewer than five valid other companies. It computes no company score or investment recommendation.
+
+See [docs/FINANCIAL_ANALYSIS.md](docs/FINANCIAL_ANALYSIS.md) for taxonomy, formulas, actual available inputs, profiles, peer methodology, files/migration and executed tests. Task 5.1 itself adds no score or recommendation; scoring is a separate versioned layer below.
+
+## Fundamental Scoring Engine (Task 5.2)
+
+`/score SBER`, `/scoreinfo SBER` and `/scorehistory SBER` accept tickers or UID. Ticker resolution uses the existing metadata lookup; a UID evaluates local cache without broker API access. Scoring captures one read-only consistent database snapshot, calculates outside database/network adapters, then persists an immutable result with its full input/model evidence. Existing `/fundrefresh`, `/divrefresh` and price commands load actual inputs separately. Scoring does not automatically fetch missing data.
+
+The baseline formula is `S = .35Q + .25F + .25V + .15D`. BANK, OIL_AND_GAS, METALS_AND_MINING and GENERAL_NON_FINANCIAL profiles use explicit bounded BigDecimal curves, source-quality/date checks and traceable metric contributions. Every weighted pillar must have sufficient evidence. Missing/uncertain/stale inputs yield PARTIAL, INSUFFICIENT_DATA, STALE_DATA or UNSUPPORTED_PROFILE with a null overall score; no imputed zero/50 or silent weight adjustment occurs. Defined losses/net cash remain observations. Extreme yields and distress context cannot create a cheap-value reward.
+
+V7 adds immutable model versions, score snapshots, metric contributions and risk flags. Identical repeated results deduplicate; changed inputs/model or expired eligibility append history. A changed configuration under the same version pair is rejected. Default thresholds/weights are assumptions and can be explicitly versioned/configured; histories never imply different models share a methodology. There is no peer-based score, ranking, stock-selection list, portfolio recommendation or trading action.
+
+**Fundamental scores are experimental heuristic indicators and have not yet been validated as predictors of investment returns.** Current provider limitations often prevent a real score: SBER's bank profile lacks verified bank capital/NPL inputs, and undated/unscaled observations block industrial profiles too. The complete synthetic demonstration is confined to tests. See [docs/SCORING_METHODOLOGY.md](docs/SCORING_METHODOLOGY.md) for all curves, evidence requirements, configuration/versioning, database/files, actual tests and unvalidated aspects. Task 5.3 is not implemented.
 
 ## Run PostgreSQL and Spring Boot locally
 
