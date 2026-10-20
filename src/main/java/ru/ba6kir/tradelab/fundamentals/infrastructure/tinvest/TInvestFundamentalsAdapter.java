@@ -28,7 +28,8 @@ public class TInvestFundamentalsAdapter implements FundamentalsProvider,AssetIde
                     || asset.getSecurity().getInstrumentKind()!=InstrumentType.INSTRUMENT_TYPE_SHARE
                     || asset.getInstrumentsList().stream().noneMatch(i -> requested.equals(i.getUid()))) return Optional.empty();
             return Optional.of(new AssetIdentity(assetUid,optional(asset.getName()),asset.hasBrand()?optional(asset.getBrand().getCompany()):null,
-                    asset.hasBrand()?optional(asset.getBrand().getUid()):null,requested,SOURCE,clock.instant()));
+                    asset.hasBrand()?optional(asset.getBrand().getUid()):null,requested,SOURCE,clock.instant(),
+                    asset.hasBrand()?optional(asset.getBrand().getSector()):null));
         } catch (MarketException e) {
             if (e.reason()==MarketException.Reason.NOT_FOUND) return Optional.empty();
             throw e;

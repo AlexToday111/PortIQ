@@ -28,22 +28,25 @@ public class JdbcFundamentalsStore implements FundamentalsStore {
                 SELECT a.*, l.instrument_uid, l.verified_at FROM asset_identities a
                 JOIN instrument_asset_links l USING(asset_uid) WHERE l.instrument_uid=?
                 """,(r,n) -> new AssetIdentity(r.getString("asset_uid"),r.getString("asset_name"),r.getString("company_name"),
-                r.getString("brand_uid"),r.getString("instrument_uid"),r.getString("source"),instant(r,"verified_at")),uid).stream().findFirst();
+                r.getString("brand_uid"),r.getString("instrument_uid"),r.getString("source"),instant(r,"verified_at"),r.getString("provider_sector")),uid).stream().findFirst();
     }
     @Override public void saveIdentity(AssetIdentity identity) {
         tx.executeWithoutResult(status -> {
             jdbc.update("""
-                    INSERT INTO asset_identities(asset_uid,asset_name,company_name,brand_uid,source,updated_at) VALUES(?,?,?,?,?,?)
+                    INSERT INTO asset_identities(asset_uid,asset_name,company_name,brand_uid,source,updated_at,provider_sector) VALUES(?,?,?,?,?,?,?)
                     ON CONFLICT(asset_uid) DO UPDATE SET asset_name=EXCLUDED.asset_name,company_name=EXCLUDED.company_name,
-                      brand_uid=EXCLUDED.brand_uid,source=EXCLUDED.source,updated_at=EXCLUDED.updated_at
+                      brand_uid=EXCLUDED.brand_uid,source=EXCLUDED.source,updated_at=EXCLUDED.updated_at,provider_sector=EXCLUDED.provider_sector
                     WHERE asset_identities.updated_at<=EXCLUDED.updated_at
-                    """,identity.assetUid(),identity.assetName(),identity.companyName(),identity.brandUid(),identity.source(),utc(identity.verifiedAt()));
+                    """,identity.assetUid(),identity.assetName(),identity.companyName(),identity.brandUid(),identity.source(),utc(identity.verifiedAt()),identity.providerSector());
             jdbc.update("""
                     INSERT INTO instrument_asset_links(instrument_uid,asset_uid,verified_at) VALUES(?,?,?)
                     ON CONFLICT(instrument_uid) DO UPDATE SET asset_uid=EXCLUDED.asset_uid,verified_at=EXCLUDED.verified_at
                     WHERE instrument_asset_links.verified_at<=EXCLUDED.verified_at
                     """,identity.instrumentUid(),identity.assetUid(),utc(identity.verifiedAt()));
         });
+    }
+    @Override public List<String> instrumentUids(String assetUid) {
+        return jdbc.query("SELECT instrument_uid FROM instrument_asset_links WHERE asset_uid=? ORDER BY instrument_uid",(r,n) -> r.getString(1),assetUid);
     }
     @Override public Optional<FundamentalSnapshot> latest(String uid) {
         return jdbc.query("SELECT * FROM fundamental_snapshots WHERE asset_uid=? ORDER BY id DESC LIMIT 1",this::snapshot,uid).stream().findFirst();

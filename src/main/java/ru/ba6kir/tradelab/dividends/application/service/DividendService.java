@@ -44,6 +44,10 @@ public class DividendService {
         return sync(stock,back).view();
     }
     public SyncResult refresh(String identifier) { return sync(resolve(identifier),lookback); }
+    /** Local-only evidence for reproducible analysis; never resolves a ticker or refreshes a provider. */
+    public View cached(String uid) {
+        return view(instruments.getCached(InstrumentService.validateUid(uid)).orElseThrow(() -> new MarketException(MarketException.Reason.NOT_FOUND)),null);
+    }
     private StockInstrument resolve(String identifier) {
         if (!enabled) throw new MarketException(MarketException.Reason.DISABLED);
         return instruments.resolve(identifier);

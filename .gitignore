@@ -1,6 +1,7 @@
 target/
 .tools/
 .env
+analysis-local.yml
 .env.*
 !.env.example
 *.log

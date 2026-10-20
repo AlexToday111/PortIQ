@@ -65,7 +65,7 @@ class TradeLabApplicationIT {
     @Test
     @Transactional
     void migratesPostgresAndReadsMetadataThroughJpa() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         var metadata = entityManager.find(ApplicationMetadata.class, (short) 1);
@@ -77,7 +77,7 @@ class TradeLabApplicationIT {
                 WHERE table_name = 'application_metadata' AND column_name = 'installed_at'
                 """, String.class)).isEqualTo("timestamp with time zone");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success", Long.class))
-                .isEqualTo(5L);
+                .isEqualTo(6L);
     }
 
     @Test

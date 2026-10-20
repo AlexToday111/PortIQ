@@ -27,8 +27,10 @@ class TInvestFundamentalsAdapterTest {
     }
     @Test void resolvesShareAssetAndChecksReverseMembership() {
         channel.responses.add(ShareResponse.newBuilder().setInstrument(Share.newBuilder().setUid(UID).setAssetUid(ASSET)).build());
-        channel.responses.add(asset(UID));
-        assertThat(adapter.resolve(UID).orElseThrow().assetUid()).isEqualTo(ASSET);
+        channel.responses.add(asset(UID).toBuilder().setAsset(asset(UID).getAsset().toBuilder().setBrand(Brand.newBuilder().setSector("financial"))).build());
+        var identity=adapter.resolve(UID).orElseThrow();
+        assertThat(identity.assetUid()).isEqualTo(ASSET);
+        assertThat(identity.providerSector()).isEqualTo("financial");
         assertThat(channel.requests.get(0)).isInstanceOfSatisfying(InstrumentRequest.class,r -> assertThat(r.getId()).isEqualTo(UID));
         assertThat(channel.requests.get(1)).isInstanceOfSatisfying(AssetRequest.class,r -> assertThat(r.getId()).isEqualTo(ASSET));
     }

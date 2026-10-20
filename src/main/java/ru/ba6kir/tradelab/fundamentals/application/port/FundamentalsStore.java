@@ -11,6 +11,7 @@ public interface FundamentalsStore {
         public ReportBatch { events=List.copyOf(events); }
     }
     Optional<AssetIdentity> findIdentity(String instrumentUid);
+    List<String> instrumentUids(String assetUid);
     void saveIdentity(AssetIdentity identity);
     Optional<FundamentalSnapshot> latest(String assetUid);
     RequestState requestState(String assetUid);

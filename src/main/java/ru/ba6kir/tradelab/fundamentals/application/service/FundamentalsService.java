@@ -48,6 +48,17 @@ public class FundamentalsService {
         var identity=store.findIdentity(instrument.uid()).orElse(null);
         return view(instrument,identity,identity==null ? null : store.latest(identity.assetUid()).orElse(null),true,null);
     }
+    /** Read-only application contract for bounded peer analysis; never fetches external data. */
+    public Optional<FundamentalSnapshot> cachedAsset(String assetUid) {
+        return store.latest(InstrumentService.validateUid(assetUid));
+    }
+    public List<String> cachedInstrumentUids(String assetUid) { return store.instrumentUids(InstrumentService.validateUid(assetUid)); }
+    /** Explicit local-only read, including when the provider integration is disabled. */
+    public FundamentalAnalysisView cachedInstrument(String uid) {
+        var instrument=instruments.getCached(InstrumentService.validateUid(uid)).orElseThrow(() -> new MarketException(MarketException.Reason.NOT_FOUND));
+        var identity=store.findIdentity(uid).orElse(null);
+        return view(instrument,identity,identity==null?null:store.latest(identity.assetUid()).orElse(null),true,null);
+    }
     public SyncResult refresh(String identifier) {
         var instrument=instrument(identifier);
         var identity=store.findIdentity(instrument.uid()).orElse(null);
