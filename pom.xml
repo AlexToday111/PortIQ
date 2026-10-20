@@ -17,8 +17,14 @@
   <properties>
     <java.version>25</java.version>
     <telegrambots.version>10.3.0</telegrambots.version>
+    <tinvest.version>1.51</tinvest.version>
   </properties>
   <dependencies>
+    <dependency>
+      <groupId>ru.tinkoff.piapi</groupId>
+      <artifactId>java-sdk-core</artifactId>
+      <version>${tinvest.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.telegram</groupId>
       <artifactId>telegrambots-springboot-longpolling-starter</artifactId>

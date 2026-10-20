@@ -99,8 +99,12 @@ public class TelegramBotConfiguration {
     }
 
     @Bean
-    TelegramStatusService telegramStatusService(JdbcTemplate jdbc, ApplicationAvailability availability, TelegramBotState state) {
-        return new TelegramStatusService(jdbc, availability, state, Clock.systemUTC());
+    TelegramStatusService telegramStatusService(JdbcTemplate jdbc, ApplicationAvailability availability, TelegramBotState state,
+            ObjectProvider<ru.ba6kir.tradelab.market.application.price.MarketPriceService> market) {
+        return new TelegramStatusService(jdbc, availability, state, Clock.systemUTC(), () -> {
+            var service=market.getIfAvailable();
+            return service==null ? "" : ru.ba6kir.tradelab.market.telegram.PriceText.status(service);
+        });
     }
 
     @Bean

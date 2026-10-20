@@ -26,7 +26,7 @@ import ru.ba6kir.tradelab.common.metadata.ApplicationMetadata;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "tradelab.telegram.enabled=false")
+        properties = {"tradelab.telegram.enabled=false", "tradelab.invest.enabled=false", "tradelab.invest.token="})
 @Testcontainers(disabledWithoutDocker = true)
 class TradeLabApplicationIT {
 
@@ -65,7 +65,7 @@ class TradeLabApplicationIT {
     @Test
     @Transactional
     void migratesPostgresAndReadsMetadataThroughJpa() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         var metadata = entityManager.find(ApplicationMetadata.class, (short) 1);
@@ -77,7 +77,7 @@ class TradeLabApplicationIT {
                 WHERE table_name = 'application_metadata' AND column_name = 'installed_at'
                 """, String.class)).isEqualTo("timestamp with time zone");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success", Long.class))
-                .isEqualTo(1L);
+                .isEqualTo(5L);
     }
 
     @Test

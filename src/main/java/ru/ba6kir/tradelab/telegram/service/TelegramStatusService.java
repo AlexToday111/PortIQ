@@ -12,13 +12,20 @@ public class TelegramStatusService {
     private final ApplicationAvailability availability;
     private final TelegramBotState botState;
     private final Clock clock;
+    private final java.util.function.Supplier<String> marketStatus;
 
     public TelegramStatusService(JdbcTemplate jdbc, ApplicationAvailability availability,
                                  TelegramBotState botState, Clock clock) {
+        this(jdbc, availability, botState, clock, () -> "");
+    }
+
+    public TelegramStatusService(JdbcTemplate jdbc, ApplicationAvailability availability,
+                                 TelegramBotState botState, Clock clock, java.util.function.Supplier<String> marketStatus) {
         this.jdbc = jdbc;
         this.availability = availability;
         this.botState = botState;
         this.clock = clock;
+        this.marketStatus = marketStatus;
     }
 
     public String status() {
@@ -33,6 +40,7 @@ public class TelegramStatusService {
                 ? "доступно" : "не готово") + "\n"
                 + "База данных: " + (databaseAvailable ? "доступна" : "недоступна") + "\n"
                 + "Время (UTC): " + DateTimeFormatter.ISO_INSTANT.format(clock.instant()) + "\n"
-                + "Telegram: " + (botState.isPolling() ? "Long Polling запущен" : "Long Polling остановлен");
+                + "Telegram: " + (botState.isPolling() ? "Long Polling запущен" : "Long Polling остановлен")
+                + marketStatus.get();
     }
 }

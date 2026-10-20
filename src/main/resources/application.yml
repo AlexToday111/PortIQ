@@ -31,6 +31,27 @@ spring:
     timeout-per-shutdown-phase: 30s
 
 tradelab:
+  dividends:
+    lookback-years: ${DIVIDENDS_LOOKBACK_YEARS:3}
+    forward-days: ${DIVIDENDS_FORWARD_DAYS:365}
+    cache-ttl: ${DIVIDENDS_CACHE_TTL:24h}
+    refresh-cooldown: ${DIVIDENDS_REFRESH_COOLDOWN:60s}
+  fundamentals:
+    snapshot-ttl: ${FUNDAMENTALS_SNAPSHOT_TTL:24h}
+    reporting-max-age: ${FUNDAMENTALS_REPORTING_MAX_AGE:548d}
+    refresh-cooldown: ${FUNDAMENTALS_REFRESH_COOLDOWN:60s}
+    report-window-days: ${FUNDAMENTALS_REPORT_WINDOW_DAYS:180}
+  market-data:
+    tracked-tickers: ${INVEST_TRACKED_TICKERS:}
+    history-days: ${INVEST_HISTORY_DAYS:365}
+    refresh-cooldown: ${INVEST_REFRESH_COOLDOWN:60s}
+  invest:
+    enabled: ${INVEST_API_ENABLED:false}
+    token: ${INVEST_API_TOKEN:}
+    metadata-ttl: ${INVEST_METADATA_TTL:24h}
+    timeout: ${INVEST_API_TIMEOUT:3s}
+    max-attempts: ${INVEST_API_MAX_ATTEMPTS:3}
+    retry-backoff: ${INVEST_API_RETRY_BACKOFF:200ms}
   telegram:
     enabled: ${TELEGRAM_ENABLED:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}
@@ -79,3 +100,6 @@ logging:
     org.hibernate.orm.jdbc.bind: OFF
     # SDK exceptions may contain token-bearing URLs; the adapter logs safe events instead.
     org.telegram: OFF
+    # Provider transport messages/headers are never application diagnostics.
+    ru.ttech.piapi: OFF
+    io.grpc: OFF
