@@ -1,12 +1,13 @@
 # TradeLab Portfolio
 
-TradeLab Portfolio will be a private Telegram assistant for long-term analysis of Russian equities listed on MOEX. This first stage provides a runnable Java application, PostgreSQL persistence, versioned migrations, health monitoring, and tests. Telegram, broker APIs, market data, portfolio tracking, analysis, and allocation recommendations are deliberately outside this stage.
+TradeLab Portfolio is a private Telegram assistant being developed for long-term analysis of Russian equities listed on MOEX. It currently provides a runnable Java application, PostgreSQL persistence, versioned migrations, health monitoring, and an optional private Telegram bot with basic operational commands. Broker APIs, market data, portfolio tracking, analysis, and allocation recommendations are outside the implemented scope.
 
 ## Stack and prerequisites
 
 - JDK **25** (set `JAVA_HOME` to the JDK, not a JRE).
 - Spring Boot **3.5.16**, Spring Data JPA, Bean Validation, Actuator, and Flyway.
 - PostgreSQL **17**.
+- TelegramBots **10.3.0** long-polling starter and client; the feature owns conditional registration and shutdown. Its [published starter POM](https://repo.maven.apache.org/maven2/org/telegram/telegrambots-springboot-longpolling-starter/10.3.0/telegrambots-springboot-longpolling-starter-10.3.0.pom) targets Spring Boot 3.5.x; the application retains Boot 3.5.16 dependency management.
 - Maven **3.9.12**, downloaded and checksum-verified by Maven Wrapper **3.3.4**; no global Maven installation is necessary.
 - JUnit 5, AssertJ, Mockito (through Spring Boot's test starter), and Testcontainers.
 - Docker Engine / Docker Desktop with Linux containers and Docker Compose v2 or later. Docker must be running for integration tests and container workflows.
@@ -34,6 +35,9 @@ On Bash, use `cp .env.example .env` and your preferred editor. Never commit real
 | `DB_NAME` | Database name; letters, digits, underscores | `tradelab` |
 | `DB_USERNAME` | Database login | `tradelab` |
 | `DB_PASSWORD` | Mandatory, nonblank password | Set privately |
+| `TELEGRAM_ENABLED` | Enable the private bot; defaults to false | `false` |
+| `TELEGRAM_BOT_TOKEN` | BotFather token; mandatory only when enabled | Leave empty when disabled |
+| `TELEGRAM_OWNER_ID` | Positive numeric Telegram User ID; mandatory only when enabled | Your own numeric ID |
 
 The local profile defaults host, port, database name, and username; it never supplies a password. Without the local profile, host, name, username, and password must be supplied. The default port is 5432. Typed configuration rejects invalid values before a database connection is opened. Credentials are passed separately from the JDBC URL.
 
@@ -57,7 +61,47 @@ set -a
 set +a
 ```
 
-No Telegram or broker credentials are required anywhere.
+Telegram credentials are unnecessary while `TELEGRAM_ENABLED=false`, including for automated tests. Broker credentials are never required. When Telegram is enabled, token syntax and owner ID are validated before registration; remote token validity is checked with `getMe` during startup. Tokens are redacted in configuration diagnostics.
+
+## Set up the private Telegram bot
+
+1. Open the official [@BotFather](https://t.me/BotFather), send `/newbot`, and follow its prompts. See Telegram's [BotFather documentation](https://core.telegram.org/bots/features#botfather). Keep the resulting token private, set `TELEGRAM_BOT_TOKEN` in untracked `.env`, and leave `TELEGRAM_ENABLED=false` during setup.
+2. Obtain **your Telegram User ID**, not your username or the bot's ID. You can read `message.from.id` from an update sent to your own bot using the official [getUpdates API](https://core.telegram.org/bots/api#getupdates). Stop any other polling instance first, open a private chat with your new bot, and send exactly `tradelab-owner-setup`.
+3. After importing `.env` into PowerShell as shown above, run this one-off setup helper. It prints only matching numeric sender IDs and never prints the token, request URL, or full updates. Do not run it alongside the application:
+
+```powershell
+try {
+    $requestUri = "https://api.telegram.org/bot$($env:TELEGRAM_BOT_TOKEN)/getUpdates"
+    $reply = Invoke-RestMethod -Method Post -Uri $requestUri `
+        -ContentType 'application/json' -Body '{"allowed_updates":["message"],"timeout":0}'
+    $reply.result | Where-Object {
+        $_.message.text -eq 'tradelab-owner-setup' -and $_.message.chat.type -eq 'private'
+    } | ForEach-Object { $_.message.from.id } | Sort-Object -Unique
+} catch {
+    Write-Error 'Cannot read Telegram updates. Check the token, network, and other polling instances.'
+} finally {
+    Remove-Variable requestUri -ErrorAction SilentlyContinue
+}
+```
+
+4. Set `TELEGRAM_OWNER_ID` to the ID from **your own** setup message and set `TELEGRAM_ENABLED=true`. Reimport `.env` before local Java execution. IDs use Java `Long`, so IDs exceeding 32 bits are supported. Authorization never uses a username.
+5. Start PostgreSQL and the application using either workflow below. For Compose, the three Telegram variables are passed explicitly to the app service. Restart/recreate the application after changing configuration. Run exactly one polling instance per token. No webhook or public inbound Telegram port is needed; library registration clears an existing webhook.
+
+Check these commands from the owner's private chat:
+
+| Command | Expected behavior |
+| --- | --- |
+| `/start` | Russian welcome message introducing the personal assistant |
+| `/help` | Lists only the four registered commands and their descriptions |
+| `/ping` | Exactly `TradeLab Portfolio: online` |
+| `/status` | Application readiness, database connectivity, current UTC time, and polling state |
+| `/unknown` | Short Russian message pointing to `/help` |
+
+Command names are case-insensitive. Extra whitespace is accepted, including `/PING@YourBotName`; a suffix naming another bot is ignored. The current four commands take no arguments and report a readable validation error for extra input. Future handlers can opt into argument lists through `TelegramCommand.acceptsArguments()`. Ordinary text and non-message updates are ignored.
+
+Only the configured owner in a matching private chat can execute commands or receive responses. Unauthorized users, group/supergroup/channel chats, missing identities, and ambiguous sender information are silently ignored. The bot does not echo input or disclose internal hosts, connection strings, or exception details. Replies use plain text, split at 4096 UTF-16 units without cutting surrogate pairs. Failed sends are logged generically and are not automatically retried, avoiding duplicate replies.
+
+`/status` reports whether the polling session is scheduled, **not** continuous end-to-end Telegram connectivity. Polling network failures use bounded exponential backoff with safe warnings. SDK exception logging is disabled because its URLs can contain tokens. Do not override that setting or enable HTTP wire logging. Polling sessions, active HTTP calls, and their executors are closed on application shutdown.
 
 ## Run PostgreSQL and Spring Boot locally
 
@@ -120,9 +164,11 @@ Console logs use Spring Boot's ECS JSON format and INFO-level logging. SQL param
 .\mvnw.cmd clean verify
 ```
 
-Surefire runs `*Test`; Failsafe runs `*IT` during `verify`. `TradeLabApplicationIT` starts the complete Spring application against a disposable PostgreSQL 17 Testcontainer, verifies Flyway and Hibernate validation, reads metadata through JPA, checks UTC storage/session settings, repeats migrations, and checks HTTP health and endpoint exposure. It uses container-generated database credentials and never connects to the configured personal database. No `.env` import is required for tests.
+Surefire runs `*Test`; Failsafe runs `*IT` during `verify`. Telegram unit/configuration tests mock the transport and cover authorization, malformed updates, every command, command registration/arguments, validation, long messages, safe errors, and lifecycle cleanup.
 
-If Docker is unavailable, all five container test methods are **skipped, not passed** (`disabledWithoutDocker = true`). Unit/configuration tests still execute. Inspect `target/surefire-reports` and `target/failsafe-reports`; do not treat a Docker-free build as evidence that database integration was executed.
+`TradeLabApplicationIT` starts the complete Spring application against a disposable PostgreSQL 17 Testcontainer with Telegram explicitly disabled, verifies Flyway and Hibernate validation, reads metadata through JPA, checks UTC storage/session settings, repeats migrations, and checks HTTP health and endpoint exposure. `TelegramEnabledApplicationIT` starts the full application with Telegram enabled, real PostgreSQL, and mock Telegram clients, verifying `/status` against the real database. Both use container-generated database credentials and never connect to the configured personal database. No `.env` import is required, and no test calls a real Telegram server or requires a real bot token.
+
+If Docker is unavailable, container test methods are **skipped, not passed** (`disabledWithoutDocker = true`). Unit/configuration tests still execute. Inspect `target/surefire-reports` and `target/failsafe-reports`; do not treat a Docker-free build as evidence that database integration was executed. Mocked Telegram checks do not establish live connectivity; a real owner session is still needed to verify BotFather credentials and Telegram network access.
 
 ## Database changes
 
@@ -140,7 +186,12 @@ Add each future schema change in a new `V2__description.sql`, `V3__description.s
 - **Port already in use:** change `DB_PORT` for the PostgreSQL host binding, `APP_PORT` for the Compose HTTP host binding, or `SERVER_PORT` for local Java execution. The container's internal HTTP port and healthcheck stay at 8080.
 - **Migration checksum mismatch:** restore the original applied migration and create a new migration for the change; do not bypass validation or enable Hibernate schema updates.
 - **First build cannot download:** check HTTPS/proxy access to Maven Central and container registries. The wrapper verifies the Maven distribution checksum.
+- **Telegram configuration rejected:** with `TELEGRAM_ENABLED=true`, supply a BotFather-format token and a positive numeric `TELEGRAM_OWNER_ID`. Leave the feature disabled to run without credentials. Do not paste tokens or raw HTTP exception text into diagnostics.
+- **Telegram startup failed / polling unavailable:** check outbound HTTPS access to `api.telegram.org`, whether BotFather revoked the token, and whether another process/container uses the same token. Stop duplicate pollers. Registration uses `getMe` and clears existing webhooks before long polling; no webhook deployment is supported.
+- **Bot stays silent:** open a private chat with the bot, verify your numeric user ID, and send `/help`. Groups, other users, normal text, and commands suffixed with another bot name are intentionally ignored. Never use a username or the bot's own ID as the owner ID.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module boundaries and future extension guidance.
 
 The dated [foundation verification record](docs/VERIFICATION.md) lists the build, tests, and runtime checks actually completed during this stage.
+
+The [Telegram verification record](docs/TELEGRAM_VERIFICATION.md) lists Stage 2 checks and the explicit live-connectivity limitation.
