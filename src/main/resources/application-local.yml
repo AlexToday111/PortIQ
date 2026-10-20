@@ -1,0 +1,7 @@
+# Local conveniences only; credentials are still mandatory environment values.
+tradelab:
+  database:
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:5432}
+    name: ${DB_NAME:tradelab}
+    username: ${DB_USERNAME:tradelab}
