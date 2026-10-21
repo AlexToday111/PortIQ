@@ -31,6 +31,14 @@ spring:
     timeout-per-shutdown-phase: 30s
 
 tradelab:
+  ranking:
+    policy-version: ${RANKING_POLICY_VERSION:profile-period-1}
+    snapshot-ttl: ${RANKING_SNAPSHOT_TTL:1h}
+    refresh-cooldown: ${RANKING_REFRESH_COOLDOWN:60s}
+    score-max-age: ${RANKING_SCORE_MAX_AGE:24h}
+    quote-max-age: ${RANKING_QUOTE_MAX_AGE:3d}
+    metadata-max-age: ${RANKING_METADATA_MAX_AGE:24h}
+    instrument-uids: ${RANKING_INSTRUMENT_UIDS:}
   scoring:
     model-version: ${SCORING_MODEL_VERSION:fundamental-heuristic-1}
     configuration-version: ${SCORING_CONFIGURATION_VERSION:initial-1}
