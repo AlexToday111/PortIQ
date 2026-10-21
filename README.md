@@ -1,6 +1,6 @@
 # TradeLab Portfolio
 
-TradeLab Portfolio is a private Telegram assistant being developed for long-term analysis of Russian equities listed on MOEX. It provides PostgreSQL persistence, health monitoring, an optional private Telegram bot, T-Invest stock metadata, latest exchange trade prices, historical daily candles, fundamental-data snapshots, reporting/dividend calendars, sector classification, typed financial analysis and experimental explainable fundamental scores. Portfolio management, investment recommendations, market-wide ranking, AI analysis, trading and scheduled reports remain outside the implemented scope.
+TradeLab Portfolio is a private Telegram assistant being developed for long-term analysis of Russian equities listed on MOEX. It provides PostgreSQL persistence, health monitoring, an optional private Telegram bot, T-Invest stock metadata, latest exchange trade prices, historical daily candles, fundamentals/dividend calendars, sector analysis, experimental explainable scores, comparable research ranking groups and personal portfolio bookkeeping with FIFO, cash, local valuation and optional read-only broker synchronization/reconciliation. Investment recommendations, allocation/optimization, market-wide scanning, AI analysis, trading and scheduled reports remain outside the implemented scope.
 
 ## Stack and prerequisites
 
@@ -65,6 +65,14 @@ On Bash, use `cp .env.example .env` and your preferred editor. Never commit real
 | `SCORING_FINANCIAL_PERIOD_MAX_AGE` | Separate maximum financial-period age, 30–3650d | `548d` |
 | `SCORING_MINIMUM_DIVIDEND_DAYS` / `SCORING_MINIMUM_DIVIDEND_YEARS` | Required queried history days and observed record years | `1095` / `3` |
 | `SCORING_EXTREME_YIELD` / `SCORING_HIGH_LEVERAGE` | Experimental extreme-yield percent and non-bank leverage risk threshold | `20` / `6` |
+| `RANKING_INSTRUMENT_UIDS` | Optional 1–30 resolved local security UIDs replacing ranking membership from tracked tickers | empty |
+| `RANKING_POLICY_VERSION` | Explicit ranking eligibility policy version | `profile-period-1` |
+| `RANKING_SNAPSHOT_TTL` / `RANKING_REFRESH_COOLDOWN` | Ranking cache lifetime / durable manual refresh cooldown | `1h` / `60s` |
+| `RANKING_SCORE_MAX_AGE` / `RANKING_QUOTE_MAX_AGE` / `RANKING_METADATA_MAX_AGE` | Original score / last trade and quote retrieval / security metadata age limits | `24h` / `3d` / `24h` |
+| `PORTFOLIO_BROKER_SYNC_ENABLED` | Explicit opt-in to read-only brokerage account synchronization; also requires enabled T-Invest | `false` |
+| `PORTFOLIO_SYNC_COOLDOWN` | Durable account-specific sync admission cooldown, 10s–1h | `60s` |
+| `PORTFOLIO_SYNC_MAX_PAGES` | 1–50 pages of 100 operations per bounded history window | `20` |
+| `PORTFOLIO_QUOTE_MAX_AGE` | Positive last-trade/retrieval age limit, at most 7d | `3d` |
 
 The local profile defaults host, port, database name, and username; it never supplies a password. Without the local profile, host, name, username, and password must be supplied. The default port is 5432. Typed configuration rejects invalid values before a database connection is opened. Credentials are passed separately from the JDBC URL.
 
@@ -143,6 +151,25 @@ Check these commands from the owner's private chat:
 | `/score SBER` | Evaluate stored financial evidence; show experimental overall/pillars or exact unscored reasons |
 | `/scoreinfo SBER` | Dry-run eligibility, metric contributions, rules, source IDs and fingerprints |
 | `/scorehistory SBER` | Latest 20 stored distinct assessments with model/configuration versions |
+| `/analyze SBER` | Russian company report using frozen score inputs plus separately dated cached market/dividend evidence |
+| `/why SBER` | Actual metric contributions, rule thresholds, periods, risks and unavailable evidence |
+| `/top [banks\|oil\|metals]` | Cached independent profile/sector/period ranking groups, never an uncalibrated cross-sector order |
+| `/rankstatus` | Exact universe, included/excluded instruments, reasons, source references and ranking freshness |
+| `/rankrefresh` | Owner-only manual regeneration from stored scores, with durable cooldown/lease and failure preservation |
+| `/portfolio` | Active portfolio summary; `create <name>`, `list`, `select <local UUID>` manage portfolio selection |
+| `/positions` | Account-scoped holdings, remaining cost, stored quote, market value and guarded unrealized P&L |
+| `/position SBER` | Holding details/FIFO lots per account plus a compatible RUB aggregate; exact UID also accepted |
+| `/transactions [1..50]` | Immutable journal history, latest 10 by default |
+| `/trade buy SBER 10 250 2 [ISO-date]` | Prepare a manual bookkeeping purchase in shares, not lots; `sell` applies FIFO |
+| `/cash deposit 10000 [ISO-date]` | Prepare RUB capital movement; also `withdraw`, `fee`, `tax`; `adjust` needs signed amount and explanation |
+| `/income dividend SBER 350 [ISO-date]` | Prepare an actual cash receipt, never a corporate-event forecast |
+| `/opening <UID> <shares> <total-cost\|unknown> <ISO-date> <evidence>` | Explicit opening inventory with known or unknown historical cost |
+| `/reverse <local transaction UUID> <explanation>` | Prepare an audited reversal, retaining the original |
+| `/confirm <token>` | Confirm a prepared record once; repeated updates/confirmations cannot duplicate it |
+| `/accounts` | Local accounts; `create`, `select`, broker `discover` and explicit `link` |
+| `/sync` | Read-only import for the selected linked account; no trade or transfer |
+| `/reconcile` | Compare journal with the stored broker observation; no automatic adjustment/provider call |
+| `/portstatus` | Portfolio/account selection, sync/checkpoint/reconciliation, accounting and quote quality |
 | `/unknown` | Short Russian message pointing to `/help` |
 
 Command names are case-insensitive. Extra whitespace is accepted, including `/PING@YourBotName`; a suffix naming another bot is ignored. `/start`, `/help`, `/ping`, and `/status` take no arguments and report a readable validation error for extra input. Market handlers accept arguments through `TelegramCommand.acceptsArguments()`. Ordinary text and non-message updates are ignored.
@@ -161,7 +188,7 @@ Only the configured owner in a matching private chat can execute commands or rec
 
 The card includes name, ticker/class code, exchange, currency, lot size, UID, optional FIGI/ISIN, API availability flag, metadata trading status, update time in UTC, source `T_INVEST_PRODUCTION`, and cache/fresh label. Missing optional fields display `не указан` and remain SQL `NULL`. `/search` returns short search matches; fields absent from `FindInstrument` are never filled with guesses or saved over a full card. Cache expiry causes a fresh request; a failed refresh reports the failure and leaves the stored record intact. Explicit application-level `getCached` can inspect a local record even with integration disabled; Telegram market commands report that access is not configured while disabled.
 
-These are instrument/security attributes, not company-level fundamentals. Search coverage and metadata depend on the broker, can include inactive securities, and are not a complete MOEX directory. Trading availability is a metadata snapshot, potentially cached for the configured lifetime; it is not a live trading-session check or a guarantee that an account can trade. Search is bounded by the provider's response and is not an exhaustive catalog scan. The sections below describe prices, fundamentals and dividends. Portfolios, rankings, recommendations, AI and order operations remain excluded.
+These are instrument/security attributes, not company-level fundamentals. Search coverage and metadata depend on the broker, can include inactive securities, and are not a complete MOEX directory. Trading availability is a metadata snapshot, potentially cached for the configured lifetime; it is not a live trading-session check or a guarantee that an account can trade. Search is bounded by the provider's response and is not an exhaustive catalog scan. The sections below describe prices, fundamentals, dividends and research rankings. Portfolios, recommendations, AI and order operations remain excluded.
 
 Troubleshooting:
 
@@ -272,9 +299,31 @@ See [docs/FINANCIAL_ANALYSIS.md](docs/FINANCIAL_ANALYSIS.md) for taxonomy, formu
 
 The baseline formula is `S = .35Q + .25F + .25V + .15D`. BANK, OIL_AND_GAS, METALS_AND_MINING and GENERAL_NON_FINANCIAL profiles use explicit bounded BigDecimal curves, source-quality/date checks and traceable metric contributions. Every weighted pillar must have sufficient evidence. Missing/uncertain/stale inputs yield PARTIAL, INSUFFICIENT_DATA, STALE_DATA or UNSUPPORTED_PROFILE with a null overall score; no imputed zero/50 or silent weight adjustment occurs. Defined losses/net cash remain observations. Extreme yields and distress context cannot create a cheap-value reward.
 
-V7 adds immutable model versions, score snapshots, metric contributions and risk flags. Identical repeated results deduplicate; changed inputs/model or expired eligibility append history. A changed configuration under the same version pair is rejected. Default thresholds/weights are assumptions and can be explicitly versioned/configured; histories never imply different models share a methodology. There is no peer-based score, ranking, stock-selection list, portfolio recommendation or trading action.
+V7 adds immutable model versions, score snapshots, metric contributions and risk flags. Identical repeated results deduplicate; changed inputs/model or expired eligibility append history. A changed configuration under the same version pair is rejected. Default thresholds/weights are assumptions and can be explicitly versioned/configured; histories never imply different models share a methodology. The scoring layer itself adds no peer-based score, ranking, stock-selection list, portfolio recommendation or trading action; ranking is a separate consumer below.
 
-**Fundamental scores are experimental heuristic indicators and have not yet been validated as predictors of investment returns.** Current provider limitations often prevent a real score: SBER's bank profile lacks verified bank capital/NPL inputs, and undated/unscaled observations block industrial profiles too. The complete synthetic demonstration is confined to tests. See [docs/SCORING_METHODOLOGY.md](docs/SCORING_METHODOLOGY.md) for all curves, evidence requirements, configuration/versioning, database/files, actual tests and unvalidated aspects. Task 5.3 is not implemented.
+**Fundamental scores are experimental heuristic indicators and have not yet been validated as predictors of investment returns.** Current provider limitations often prevent a real score: SBER's bank profile lacks verified bank capital/NPL inputs, and undated/unscaled observations block industrial profiles too. The complete synthetic demonstration is confined to tests. See [docs/SCORING_METHODOLOGY.md](docs/SCORING_METHODOLOGY.md) for all curves, evidence requirements, configuration/versioning, database/files, actual tests and unvalidated aspects.
+
+## Stock reports, rankings and explanations (Task 5.3)
+
+`/analyze <ticker|UID>` builds a Russian report from frozen scoring observations plus separately dated local market/dividend evidence. `/why` explains actual rules, threshold curves, observations and contributions. Missing scores stay missing; report generation does not silently persist a score. UID-based reports work offline; ticker ambiguity requires an explicit UID.
+
+`/rankrefresh` reads stored scores and cached data at a common cutoff and appends an atomic ranking snapshot. It reuses `INVEST_TRACKED_TICKERS` (up to 20), or the explicit `RANKING_INSTRUMENT_UIDS` override (up to 30). Only explicit ticker-based refresh resolves metadata externally; cached `/top` and `/rankstatus` make no provider calls. A durable ten-minute lease and configurable cooldown prevent concurrent regeneration; failed refreshes preserve previous rankings. No scheduling is added.
+
+`/top`, `/top banks`, `/top oil`, `/top metals` show independent groups with the same model/configuration, profile, sector and compatible source definitions/reporting periods. Cross-sector calibration is unavailable. Within each group, stored total points sort descending and UID breaks ties. Low scores remain visible when evidence is valid; unsupported, stale, missing or unavailable instruments retain explicit exclusion reasons. One eligible security per verified issuer/asset avoids counting share classes as independent companies. `/rankstatus` exposes the exact universe, dates, score references and all exclusions; expired/configuration-mismatched positions require regeneration.
+
+V8 adds `ranking_runs`, `ranking_entries` and durable `ranking_refresh_state`. Ranking is based on an **experimental fundamental scoring methodology rather than proven predictive investment performance**. It provides no buy/sell signals, price targets, return forecasts or portfolio allocations. Real data may leave all companies unscored; isolated synthetic tests demonstrate mechanics without filling production responses. See [docs/STOCK_ANALYSIS.md](docs/STOCK_ANALYSIS.md) and [docs/RANKING_METHODOLOGY.md](docs/RANKING_METHODOLOGY.md) for full contracts, files, configuration, operational flow and verification. Stage 5 ends at Task 5.3.
+
+## Portfolio Management (Task 6)
+
+Create a portfolio with `/portfolio create <name>`; it starts with an empty manual account and needs no broker credentials. `/cash`, `/trade`, `/income`, `/opening` and `/reverse` prepare a dated confirmation; `/confirm <token>` appends the immutable accounting record. Quantity means shares. Repeated Telegram updates and confirmations are idempotent, and strict manual accounting rejects historical oversells/insufficient cash. Use actual amounts from your records; no positions or balances are seeded. Without T-Invest, exact owner-supplied UIDs can be recorded, but missing validated local instrument metadata/quotes leave valuation partial.
+
+FIFO purchase lots include attributable buy fees. Partial sales consume earliest lots, with exact residual allocation and explicit sale-fee traceability. Remaining average cost, realized trade P&L, RUB cash, recorded dividend receipts/fees/taxes and dated unrealized P&L are separate. Corporate dividend announcements never credit account cash. Missing cost/quotes/currencies are not replaced with zero or a market-derived acquisition cost. Basic P&L is not TWR, MWR/XIRR, full portfolio performance or tax reporting.
+
+Broker sync defaults off. To use it, supply the existing production read-only token, enable `INVEST_API_ENABLED` and `PORTFOLIO_BROKER_SYNC_ENABLED`, restart, then `/accounts discover`, explicitly `/accounts link <local-code> <ISO-history-start> <name>`, select the returned local account and `/sync`. The selected broker account must report read-only access. Manual and imported history are never auto-merged. Existing effective manual history requires source-overlap review: use a separate portfolio for the same real account, or the explicit `distinct-manual-accounts` link suffix only after verifying those are other real accounts. The acknowledgment is persisted.
+
+Synchronization uses cursor pages, bounded overlapping windows, durable per-account admission and an atomic source/ledger/projection/checkpoint commit. Updated supported source records append reversals/replacements; aliases and ambiguous IDs are handled conservatively. `/reconcile` records quantity/cash differences without invented corrections. Unsupported corporate actions, currencies/instruments, missing history and source ambiguities remain visible and suppress misleading totals. Account and security identity are preserved; broker IDs/raw payloads are not ordinary replies/logs.
+
+V9 adds the ledger, pending confirmations, FIFO projections, account selection, broker sources/versions, sync state and reconciliation history. See [docs/PORTFOLIO_ACCOUNTING.md](docs/PORTFOLIO_ACCOUNTING.md) and [docs/BROKER_SYNCHRONIZATION.md](docs/BROKER_SYNCHRONIZATION.md) for all formulas, files, commands, source definitions, limitations and executed tests. No personal live broker synchronization is claimed without credentials. No order, transfer, allocation, optimization, recommendation or Task 7 feature is implemented.
 
 ## Run PostgreSQL and Spring Boot locally
 
