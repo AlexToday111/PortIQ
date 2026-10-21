@@ -171,6 +171,12 @@ class ScoringPersistenceIT {
     private long count(String table) { return jdbc.queryForObject("SELECT count(*) FROM "+table,Long.class); }
     private void assertReply(String text) throws Exception { verify(client,atLeastOnce()).execute(argThat((org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethod<?> m) -> m instanceof SendMessage s && s.getText().contains(text))); }
     @TestConfiguration(proxyBeanMethods=false) static class Fakes {
+        @Bean @Primary DividendService fixedDividendService(ru.ba6kir.tradelab.market.application.InstrumentService instruments,
+                ru.ba6kir.tradelab.market.application.price.MarketPriceService prices,
+                ru.ba6kir.tradelab.dividends.application.port.DividendProvider provider,
+                ru.ba6kir.tradelab.dividends.application.port.DividendStore store) {
+            return new DividendService(instruments,prices,provider,store,CLOCK,Duration.ofDays(1),Duration.ofSeconds(60),3,365,List.of(),false);
+        }
         @Bean @Primary ScoringInputProvider fakeScoringInputs() { return mock(ScoringInputProvider.class); }
         @Bean @Primary FundamentalScoringService fixedScoring(ScoringInputProvider inputs,ScoringResultRepository repo,ScoringFingerprints hashes) { return new FundamentalScoringService(inputs,repo,model(),hashes,CLOCK); }
         @Bean @Primary TelegramClient fakeTelegramClient() throws Exception { var client=mock(TelegramClient.class);when(client.execute(any(GetMe.class))).thenReturn(User.builder().id(123456789L).isBot(true).firstName("test").userName("TradeLabTestBot").build());return client; }
