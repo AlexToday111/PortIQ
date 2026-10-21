@@ -56,6 +56,12 @@ public class JdbcScoringResultRepository implements ScoringResultRepository {
         }));
     }
     @Override public Optional<ScoringResult> latest(String uid) { return history(uid,1).stream().findFirst(); }
+    @Override public Optional<ScoringModel> model(String fingerprint) {
+        return jdbc.query("SELECT profile_configuration FROM scoring_model_versions WHERE configuration_fingerprint=?",(r,n) -> {
+            try { return json.readValue(r.getString(1),ScoringModel.class); }
+            catch (java.io.IOException e) { throw new IllegalStateException("Cannot read scoring model"); }
+        },fingerprint).stream().findFirst();
+    }
     @Override public List<ScoringResult> history(String uid,int limit) {
         if (limit<1 || limit>200) throw new IllegalArgumentException("Score history limit must be 1..200");
         return jdbc.query("SELECT id,result FROM stock_score_snapshots WHERE instrument_uid=? ORDER BY id DESC LIMIT ?",(r,n) -> decode(r.getString("result"),r.getLong("id")),uid,limit);
