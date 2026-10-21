@@ -71,6 +71,13 @@ public class TInvestStockInstrumentProvider implements StockInstrumentProvider, 
     public <T> T call(Function<InstrumentsServiceGrpc.InstrumentsServiceBlockingStub, T> operation) {
         return rpc.call(() -> operation.apply(stub.withDeadlineAfter(properties.timeout().toMillis(), TimeUnit.MILLISECONDS)));
     }
+    /** Infrastructure-only read gateway; shares credentials, channel, deadlines and rate-limit state. */
+    public <T> T usersCall(Function<UsersServiceGrpc.UsersServiceBlockingStub,T> operation) {
+        return rpc.call(() -> operation.apply(UsersServiceGrpc.newBlockingStub(channel).withDeadlineAfter(properties.timeout().toMillis(),TimeUnit.MILLISECONDS)));
+    }
+    public <T> T operationsCall(Function<OperationsServiceGrpc.OperationsServiceBlockingStub,T> operation) {
+        return rpc.call(() -> operation.apply(OperationsServiceGrpc.newBlockingStub(channel).withDeadlineAfter(properties.timeout().toMillis(),TimeUnit.MILLISECONDS)));
+    }
 
     MarketDataServiceGrpc.MarketDataServiceBlockingStub marketDataStub() {
         return MarketDataServiceGrpc.newBlockingStub(channel);

@@ -31,6 +31,11 @@ spring:
     timeout-per-shutdown-phase: 30s
 
 tradelab:
+  portfolio:
+    broker-sync-enabled: ${PORTFOLIO_BROKER_SYNC_ENABLED:false}
+    sync-cooldown: ${PORTFOLIO_SYNC_COOLDOWN:60s}
+    max-pages: ${PORTFOLIO_SYNC_MAX_PAGES:20}
+    quote-max-age: ${PORTFOLIO_QUOTE_MAX_AGE:3d}
   ranking:
     policy-version: ${RANKING_POLICY_VERSION:profile-period-1}
     snapshot-ttl: ${RANKING_SNAPSHOT_TTL:1h}
