@@ -70,7 +70,12 @@ public class TelegramCommandDispatcher {
             return;
         }
         try {
-            String response = command.execute(arguments);
+            if (command instanceof ru.ba6kir.tradelab.telegram.command.RequestAwareTelegramCommand && update.getUpdateId()==null) {
+                sender.send(chatId,"Не удалось определить идентификатор запроса. Изменение учёта не выполнено.");
+                return;
+            }
+            String response = command instanceof ru.ba6kir.tradelab.telegram.command.RequestAwareTelegramCommand aware
+                    ? aware.execute(arguments,"telegram:"+chatId+":"+update.getUpdateId()) : command.execute(arguments);
             boolean delivered = sender.send(chatId, response);
             log.info("Telegram command /{} completed; delivered={}", command.name(), delivered);
         } catch (RuntimeException ignored) {
